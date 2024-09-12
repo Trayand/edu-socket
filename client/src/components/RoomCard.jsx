@@ -1,16 +1,22 @@
 import PropTypes from 'prop-types';
+import { socket } from '../utils/socket';
+import { useNavigate } from 'react-router';
+import { maxPlayers } from '../utils/room';
 
 export default function RoomCard({ room }) {
   const { id, name, isPrivate, users } = room;
 
+  const nav = useNavigate();
   const handleJoinRoom = () => {
     console.log("Joining room", id);
+    socket.emit("room/join-room", { id, name, password: "" });
+    nav(`/room/${id}`);
   }
 
   return (
-    <div className="card bg-neutral text-white w-60">
+    <div className="card bg-neutral text-white w-60 flex-1">
       <div className="card-body">
-        <h2 className="card-title text-ellipsis	max-w-full">{name}</h2>
+        <h2 className={"card-title text-ellipsis	max-w-full " + (users.length >= maxPlayers ? "text-accent" : "")}>{name}</h2>
         {/* Lock Icon */}
         {
           isPrivate &&
@@ -19,8 +25,12 @@ export default function RoomCard({ room }) {
           </svg>}
         {/* Lock Icon */}
         <div className="card-actions justify-between items-center mt-auto pt-4">
-          <p>{users.length}/4</p>
-          <button className="btn btn-base-100" onClick={handleJoinRoom}>Join</button>
+          <p>{users.length}/{maxPlayers}</p>
+          {
+            users.length < maxPlayers
+              ? <button className="btn btn-base-100" onClick={handleJoinRoom}>Join</button>
+              : <button className="btn btn-accent btn-outline border-none">Full</button>
+          }
         </div>
       </div>
     </div>

@@ -12,12 +12,12 @@ export const UserContext = createContext({
 
 export default function UserContextProvider({ children }) {
   const [user, setUser] = useState({
-    id: "1naop34lkDO3KASD2123",
-    username: "Felix",
-    imgUrl: "https://api.dicebear.com/9.x/personas/svg?backgroundColor=b6e3f4,c0aede,d1d4f9&&seed=Felix-1naop34lkDO3KASD2123",
-    // id: null,
-    // username: null,
-    // imgUrl: null,
+    // id: "1naop34lkDO3KASD2123",
+    // username: "Felix",
+    // imgUrl: "https://api.dicebear.com/9.x/personas/svg?backgroundColor=b6e3f4,c0aede,d1d4f9&&seed=Felix-1naop34lkDO3KASD2123",
+    id: null,
+    username: null,
+    imgUrl: null,
   });
 
   return (

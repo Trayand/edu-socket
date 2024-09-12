@@ -2,15 +2,13 @@ import { useState, useContext, useEffect } from 'react';
 
 import { socket } from '../utils/socket';
 
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom';
 
 import { UserContext } from '../contexts/userContext';
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const nav = useNavigate();
 
   const { setUser } = useContext(UserContext);
 
@@ -38,19 +36,6 @@ export default function Login() {
         username: user.username,
         imgUrl: ""
       });
-      setLoading(false);
-    })
-
-    socket.on("user/update-user-info", (user) => {
-      setLoading(true);
-      setUser({
-        id: user.id,
-        username: user.username,
-        imgUrl: `https://api.dicebear.com/9.x/personas/svg?backgroundColor=b6e3f4,c0aede,d1d4f9&&seed=${user.username}`
-      });
-      if (user.username) {
-        nav("/");
-      }
       setLoading(false);
     })
   }, [])

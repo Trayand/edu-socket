@@ -1,6 +1,7 @@
 const { v4: uuid } = require("uuid");
 // const namesJson = require("./data/names.json");
 
+const maxPlayers = 6;
 const users = [];
 const rooms = [
   {
@@ -30,6 +31,7 @@ const rooms = [
     password: "",
     isPrivate: false,
     users: [],
+    status: "waiting", // waiting, playing, finished
   },
 ];
 
@@ -40,6 +42,7 @@ const eventEmitList = {
     "user/new-user",
     "update-user-info",
     "room/room-list",
+    "room/room-info",
     "room/room-created",
     "room/user-joined",
     "room/user-left",
@@ -49,6 +52,7 @@ const eventEmitList = {
     "room/get-rooms",
     "room/create-room",
     "room/join-room",
+    "room/room-info",
     "room/leave-room",
     "disconnect",
   ],
@@ -69,12 +73,15 @@ module.exports = function (socket, io) {
     id: uuid(),
     username: null,
     socketId: socket.id,
+    isReady: false,
+    point: 0,
   };
 
   socket.emit("user/new-user", socket.user);
 
   socket.on("user/new-user-username", ({ username }) => {
     socket.user.username = username;
+    socket.user.imgUrl = `https://api.dicebear.com/9.x/personas/svg?backgroundColor=b6e3f4,c0aede,d1d4f9&&seed=${username}-${socket.user.id}`;
 
     socket.emit("user/update-user-info", socket.user);
     socket.broadcast.emit("user/new-user-connected", socket.user);
@@ -96,19 +103,68 @@ module.exports = function (socket, io) {
   socket.on("room/join-room", (roomInfo) => {
     const { id, name, password } = roomInfo;
 
-    const room = joinRoom(roomInfo, socket.user);
+    const room = rooms.find((room) => room.id === id);
+    if (!room) {
+      return socket.emit("error", { error: "Room not found" });
+    }
+
+    if (room.users.length >= maxPlayers) {
+      return socket.emit("error", { error: "Room is full" });
+    }
+
+    if (room.isPrivate && room.password !== password) {
+      return socket.emit("error", { error: "Incorrect password" });
+    }
+
+    const userExists = rooms.find((room) =>
+      room.users.some((user) => user.id === socket.user.id)
+    );
+
+    if (userExists) {
+      leaveRoom({ roomInfo: userExists, userData: socket.user, socket });
+    }
+
+    socket.join(id);
+    room.users.push(socket.user);
 
     // notify all users in the room
     io.to(id).emit("room/user-joined", room);
+  });
 
-    // notify all users outside the room for users count
-    //? io.broadcast.emit("room/user-joined", room);
+  socket.on("room/room-info", (roomInfo) => {
+    const { id } = roomInfo;
+    const room = rooms.find((room) => room.id === id);
+
+    if (!room) {
+      return socket.emit("error", { error: "Room not found" });
+    }
+
+    socket.emit("room/room-info", room);
   });
 
   socket.on("room/leave-room", (roomInfo) => {
     const { id } = roomInfo;
-    const room = leaveRoom(roomInfo, socket.user);
+    const room = leaveRoom({
+      roomInfo: { roomId: id },
+      userData: socket.user,
+      socket,
+    });
     io.to(id).emit("room/user-left", { room, users: room.users });
+  });
+
+  socket.on("game/user-state-ready", (roomInfo) => {
+    const { id } = roomInfo;
+    const room = rooms.find((room) => room.id === id);
+    if (!room) {
+      return socket.emit("error", { error: "Room not found" });
+    }
+
+    socket.user.isReady = !socket.user.isReady;
+    io.to(id).emit("game/user-ready", room.users);
+  });
+
+  socket.on("leave-all-rooms", () => {
+    leaveAllRooms(socket);
   });
 
   socket.on("disconnect", () => {
@@ -119,33 +175,14 @@ module.exports = function (socket, io) {
   });
 };
 
-function newUser({ username, socket }) {
-  // const adjective =
-  //   namesJson.adjective[Math.floor(Math.random() * namesJson.adjective.length)];
-  // const animal =
-  //   namesJson.animal[Math.floor(Math.random() * namesJson.animal.length)];
-  const user = {
-    // username: `${adjective} ${animal}`,
-    ...socket.user,
-    username,
-  };
-  users.push(user);
-  return user;
-}
-
 function disconnectUser({ userData, socket }) {
   const { id } = userData;
   const user = users.find((user) => user.id === id);
   if (user) {
     users = users.filter((user) => user.id !== id);
   }
-  const userExists = rooms.find((room) =>
-    room.users.some((user) => user.id === userData.id)
-  );
 
-  if (userExists) {
-    leaveRoom({ roomInfo: userExists, userData, socket });
-  }
+  leaveAllRooms(socket);
 
   return user;
 }
@@ -162,32 +199,6 @@ function createRoom({ roomInfo }) {
   return room;
 }
 
-function joinRoom({ roomInfo, userData, socket }) {
-  const { roomId, password } = roomInfo;
-  const room = rooms.find((room) => room.id === roomId);
-  if (!room) {
-    return { error: "Room not found" };
-  }
-  if (room.isPrivate && room.password !== password) {
-    return { error: "Incorrect password" };
-  }
-  if (room.users.find((user) => user.id === userData.id)) {
-    return { error: "User already in room" };
-  }
-
-  const userExists = rooms.find((room) =>
-    room.users.some((user) => user.id === userData.id)
-  );
-
-  if (userExists) {
-    leaveRoom({ roomInfo: userExists, userData, socket });
-  }
-
-  socket.join(roomId);
-  room.users.push(userData);
-  return room;
-}
-
 function leaveRoom({ roomInfo, userData, socket }) {
   const { roomId } = roomInfo;
   const room = rooms.find((room) => room.id === roomId);
@@ -196,15 +207,18 @@ function leaveRoom({ roomInfo, userData, socket }) {
   }
 
   socket.leave(roomId);
+  socket.user.isReady = false;
   room.users = room.users.filter((user) => user.id !== userData.id);
   return room;
 }
 
-function getRooms({ io }) {
-  return io.sockets.adapter.rooms;
+function leaveAllRooms(socket) {
+  rooms.forEach((room) => {
+    socket.leave(room.id);
+    room.users = room.users.filter((user) => user.id !== socket.user.id);
+    socket.to(room.id).emit("room/room-info", room);
+  });
 }
-
-function getRoom({ roomInfo }) {}
 
 function getRandomNamesForRooms() {
   const names = [
