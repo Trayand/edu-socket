@@ -1,5 +1,6 @@
 const { v4: uuid } = require("uuid");
 // const namesJson = require("./data/names.json");
+const axios = require("axios");
 
 const maxPlayers = 6;
 const users = [];
@@ -60,14 +61,6 @@ const eventEmitList = {
 
 module.exports = function (socket, io) {
   console.log("A user connected");
-
-  // const new_user = newUser({
-  //   userData: {
-  //     username,
-  //     id: uuid(),
-  //   },
-  //   socket,
-  // });
 
   socket.user = {
     id: uuid(),
@@ -236,4 +229,40 @@ function getRandomNamesForRooms() {
     "Hey noob, come and play with me",
   ];
   return names[Math.floor(Math.random() * names.length)];
+}
+
+function startGame(io, socket, room) {
+  let counter = 5;
+  const gameStat = {
+    status: "waiting",
+    words: [],
+    currentWord: "",
+    currentWordIndex: 0,
+    currentWordGif: [],
+    currentWordClue: "",
+    currentWordAnswer: "",
+    currentWordGuessed: false,
+    gameTimer: 60,
+  };
+
+  // Server will hit API to get random word
+  axios
+    .get("https://random-word-api.herokuapp.com/word?number=10")
+    .then((response) => {
+      gameStat.words = response.data;
+      gameStat.currentWord = gameStat.words[gameStat.currentWordIndex];
+    })
+    .catch((error) => {
+      io.to(room.id).emit("error", { error: "Failed to get word" });
+    });
+
+  const counterInterval = setInterval(() => {
+    counter--;
+    io.to(room.id).emit("game/start-game-counter", counter);
+    if (counter === 0) {
+      clearInterval(counterInterval);
+      gameStat.status = "playing";
+      // startGame(io, socket, room)
+    }
+  }, 1000);
 }

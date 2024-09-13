@@ -17,7 +17,6 @@ export default function GameRoom() {
   })
 
   const { user } = useContext(UserContext)
-  console.log(user)
 
   useEffect(() => {
     socket.emit("room/room-info", { id })
@@ -43,6 +42,21 @@ export default function GameRoom() {
       socket.emit("room/leave-room", { id })
     }
   }, [])
+
+  // Next, Gameplay
+  /* 
+  - add counter when all player are ready
+  - when start, Server will hit API to get random word
+  - server hit tenor to get several gif based on the word
+  - server will send the gif and total word (maybe clue) to all player
+  - player will guess the word
+  - if player guess the word right, they will get point
+  - if player guess the word wrong, they should type the next answer
+  - when someone guess the word right, the word will be spill and the guy will got point
+  - the game will continue to the next word until 10 words
+  - the player with the most point will win the game
+  */
+
 
   const startGame = () => {
     socket.emit("game/user-state-ready", { id })
